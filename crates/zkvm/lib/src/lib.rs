@@ -145,6 +145,6 @@ extern "C" {
     /// Executes a BN254 Fp2 multiplication on the given inputs.
     pub fn syscall_bn254_fp2_mulmod(p: *mut u32, q: *const u32);
 
-    /// Executes a ADD_MUL
-    pub fn syscall_add_mul(p: *mut u32, q: *const u32);
+    /// Executes a ADD_MUL that compute a*b + c*d
+    pub fn syscall_add_mul(p: *mut u32, q: *mut u32, r: *mut u32, s: *mut u32);
 }
