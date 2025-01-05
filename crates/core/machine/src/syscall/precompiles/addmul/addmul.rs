@@ -9,6 +9,9 @@ use sp1_core_executor::{
     ExecutionRecord, Program,
 };
 
+use p3_air::{Air, AirBuilder, BaseAir};
+use p3_field::{AbstractField, PrimeField32};
+
 use crate::{
     air::MemoryAirBuilder,
     operations::{field::range::FieldLtCols, IsZeroOperation},
@@ -18,19 +21,14 @@ use crate::{
     },
 };
 
-use sp1_curves::{
-    params::{Limbs, NumLimbs, NumWords},
-    uint256::U256Field,
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use sp1_derive::AlignedBorrow;
+use sp1_stark::{
+    air::{BaseAirBuilder, InteractionScope, MachineAir, Polynomial, SP1AirBuilder},
+    MachineRecord,
 };
 
 const NUM_COLS: usize = size_of::<AddMulChipCols<u8>>();
-
-// This defines a type alias that gets the number of words needed to represent
-// a field element in U256Field
-type WordsFieldElement = <U256Field as NumWords>::WordsFieldElement;
-
-// This creates a constant that holds the actual numeric value
-const WORDS_FIELD_ELEMENT: usize = WordsFieldElement::USIZE;
 
 #[derive(Default)]
 pub struct AddMulChip;
@@ -39,7 +37,6 @@ impl AddMulChip {
     pub const fn new() -> Self {
         Self
     }
-
 }
 
 #[derive(Debug, Clone, AlignedBorrow)]
@@ -55,31 +52,10 @@ pub struct AddMulChipCols<T> {
     pub nonce: T,
 
     // Memory pointers for inputs
-    pub a_ptr: T,
-    pub b_ptr: T,
-    pub c_ptr: T,
-    pub d_ptr: T,
-
-    // Memory columns for reading inputs
-    pub a_memory: GenericArray<MemoryReadCols<T>, WordsFieldElement>,
-    pub b_memory: GenericArray<MemoryReadCols<T>, WordsFieldElement>,
-    pub c_memory: GenericArray<MemoryReadCols<T>, WordsFieldElement>,
-    pub d_memory: GenericArray<MemoryReadCols<T>, WordsFieldElement>,
-
-    // First multiplication: a * b
-    pub mul1_output: FieldOpCols<T, U256Field>,
-    pub mul1_range_check: FieldLtCols<T, U256Field>,
-
-    // Second multiplication: c * d
-    pub mul2_output: FieldOpCols<T, U256Field>,
-    pub mul2_range_check: FieldLtCols<T, U256Field>,
-
-    // Final addition: (a*b) + (c*d)
-    pub final_output: FieldOpCols<T, U256Field>,
-    pub final_range_check: FieldLtCols<T, U256Field>,
-
-    // Flag to indicate if this is a real operation
-    pub is_real: T,
+    pub a: T,
+    pub b: T,
+    pub c: T,
+    pub d: T,
 }
 
 impl<F: PrimeField32> MachineAir<F> for AddMulChip {
@@ -92,12 +68,13 @@ impl<F: PrimeField32> MachineAir<F> for AddMulChip {
 
     fn generate_trace(
         &self,
-        input: &ExecutionRecord,
-        output: &mut ExecutionRecord,
+        input: &ExecutionRecord, //  Contains the input state before the precompile execution
+        output: &mut ExecutionRecord, // Will contain the resulting state after execution
     ) -> RowMajorMatrix<F> {
+        // A matrix storing the execution trace in row-major format,
         // Generate trace rows for each event
         let rows_and_records = input
-            .get_precompile_events(SyscallCode::ADD_MUL)
+            .get_precompile_events(SyscallCode::ADDMUL)
             .chunks(1)
             .map(|events| {
                 let mut records = ExecutionRecord::default();
@@ -106,88 +83,12 @@ impl<F: PrimeField32> MachineAir<F> for AddMulChip {
                 let rows = events
                     .iter()
                     .map(|(_, event)| {
-                        let event = if let PrecompileEvent::AddMul(event) = event {
+                        let event = if let PrecompileEvent::ADDMul(event) = event {
                             event
                         } else {
                             unreachable!()
                         };
                         let mut row: [F; NUM_COLS] = [F::zero(); NUM_COLS];
-                        let cols: &mut AddMulChipCols<F> = row.as_mut_slice().borrow_mut();
-
-                        // Decode inputs from bytes to BigUint
-                        let a = BigUint::from_bytes_le(&words_to_bytes_le::<32>(&event.a));
-                        let b = BigUint::from_bytes_le(&words_to_bytes_le::<32>(&event.b));
-                        let c = BigUint::from_bytes_le(&words_to_bytes_le::<32>(&event.c));
-                        let d = BigUint::from_bytes_le(&words_to_bytes_le::<32>(&event.d));
-
-                        // Assign basic values
-                        cols.is_real = F::one();
-                        cols.shard = F::from_canonical_u32(event.shard);
-                        cols.clk = F::from_canonical_u32(event.clk);
-                        cols.a_ptr = F::from_canonical_u32(event.a_ptr);
-                        cols.b_ptr = F::from_canonical_u32(event.b_ptr);
-                        cols.c_ptr = F::from_canonical_u32(event.c_ptr);
-                        cols.d_ptr = F::from_canonical_u32(event.d_ptr);
-
-                        // Populate memory columns
-                        for i in 0..WORDS_FIELD_ELEMENT {
-                            cols.a_memory[i]
-                                .populate(event.a_memory_records[i], &mut new_byte_lookup_events);
-                            cols.b_memory[i]
-                                .populate(event.b_memory_records[i], &mut new_byte_lookup_events);
-                            cols.c_memory[i]
-                                .populate(event.c_memory_records[i], &mut new_byte_lookup_events);
-                            cols.d_memory[i]
-                                .populate(event.d_memory_records[i], &mut new_byte_lookup_events);
-                        }
-
-                        // First multiplication (a * b)
-                        let mul1_result = cols.mul1_output.populate(
-                            &mut new_byte_lookup_events,
-                            event.shard,
-                            &a,
-                            &b,
-                            FieldOperation::Mul,
-                        );
-
-                        cols.mul1_range_check.populate(
-                            &mut new_byte_lookup_events,
-                            event.shard,
-                            &mul1_result,
-                            &(BigUint::one() << 256), // Check against 2^256
-                        );
-
-                        // Second multiplication (c * d)
-                        let mul2_result = cols.mul2_output.populate(
-                            &mut new_byte_lookup_events,
-                            event.shard,
-                            &c,
-                            &d,
-                            FieldOperation::Mul,
-                        );
-
-                        cols.mul2_range_check.populate(
-                            &mut new_byte_lookup_events,
-                            event.shard,
-                            &mul2_result,
-                            &(BigUint::one() << 256),
-                        );
-
-                        // Final addition ((a*b) + (c*d))
-                        let final_result = cols.final_output.populate(
-                            &mut new_byte_lookup_events,
-                            event.shard,
-                            &mul1_result,
-                            &mul2_result,
-                            FieldOperation::Add,
-                        );
-
-                        cols.final_range_check.populate(
-                            &mut new_byte_lookup_events,
-                            event.shard,
-                            &final_result,
-                            &(BigUint::one() << 256),
-                        );
 
                         row
                     })
@@ -203,42 +104,28 @@ impl<F: PrimeField32> MachineAir<F> for AddMulChip {
             rows.extend(row);
             output.append(&mut record);
         }
-
-        // Pad rows to required size
-        pad_rows_fixed(
-            &mut rows,
-            || {
-                let mut row: [F; NUM_COLS] = [F::zero(); NUM_COLS];
-                let cols: &mut AddMulChipCols<F> = row.as_mut_slice().borrow_mut();
-
-                // Initialize empty computation for padding
-                let zero = BigUint::zero();
-                cols.mul1_output.populate(&mut vec![], 0, &zero, &zero, FieldOperation::Mul);
-                cols.mul2_output.populate(&mut vec![], 0, &zero, &zero, FieldOperation::Mul);
-                cols.final_output.populate(&mut vec![], 0, &zero, &zero, FieldOperation::Add);
-
-                row
-            },
-            input.fixed_log2_rows::<F, _>(self),
-        );
-
         // Create matrix and add nonces
-        let mut trace = RowMajorMatrix::new(
-            rows.into_iter().flatten().collect::<Vec<_>>(),
-            NUM_COLS
-        );
+        let mut trace =
+            RowMajorMatrix::new(rows.into_iter().flatten().collect::<Vec<_>>(), NUM_COLS);
 
-        // Write nonces to trace
-        for i in 0..trace.height() {
-            let cols: &mut AddMulChipCols<F> =
-                trace.values[i * NUM_COLS..(i + 1) * NUM_COLS].borrow_mut();
-            cols.nonce = F::from_canonical_usize(i);
-        }
+        // // Write nonces to trace
+        // for i in 0..trace.height() {
+        //     let cols: &mut AddMulChipCols<F> =
+        //         trace.values[i * NUM_COLS..(i + 1) * NUM_COLS].borrow_mut();
+        //     cols.nonce = F::from_canonical_usize(i);
+        // }
 
         trace
     }
-}
 
+    fn included(&self, shard: &Self::Record) -> bool {
+        if let Some(shape) = shard.shape.as_ref() {
+            shape.included::<F, _>(self)
+        } else {
+            !shard.get_precompile_events(SyscallCode::ADDMUL).is_empty()
+        }
+    }
+}
 
 impl<F> BaseAir<F> for AddMulChip {
     fn width(&self) -> usize {
@@ -249,128 +136,6 @@ impl<F> BaseAir<F> for AddMulChip {
 impl<AB> Air<AB> for AddMulChip
 where
     AB: SP1AirBuilder,
-    Limbs<AB::Var, <U256Field as NumLimbs>::Limbs>: Copy,
 {
-    fn eval(&self, builder: &mut AB) {
-        let main = builder.main();
-        let local = main.row_slice(0);
-        let local: &AddMulChipCols<AB::Var> = (*local).borrow();
-        let next = main.row_slice(1);
-        let next: &AddMulChipCols<AB::Var> = (*next).borrow();
-
-        // 1. Basic boolean and nonce constraints
-        builder.assert_bool(local.is_real);
-        builder.when_first_row().assert_zero(local.nonce);
-        builder.when_transition().assert_eq(local.nonce + AB::Expr::one(), next.nonce);
-
-        // 2. Memory access constraints for inputs
-        builder.eval_memory_access_slice(
-            local.shard,
-            local.clk.into(),
-            local.a_ptr,
-            &local.a_memory,
-            local.is_real,
-        );
-        builder.eval_memory_access_slice(
-            local.shard,
-            local.clk.into(),
-            local.b_ptr,
-            &local.b_memory,
-            local.is_real,
-        );
-        builder.eval_memory_access_slice(
-            local.shard,
-            local.clk.into(),
-            local.c_ptr,
-            &local.c_memory,
-            local.is_real,
-        );
-        builder.eval_memory_access_slice(
-            local.shard,
-            local.clk.into(),
-            local.d_ptr,
-            &local.d_memory,
-            local.is_real,
-        );
-
-        // 3. First multiplication (a * b)
-        let a_limbs = limbs_from_access(&local.a_memory);
-        let b_limbs = limbs_from_access(&local.b_memory);
-        let modulus_2_256 = {
-            let mut coeff = Vec::new();
-            coeff.resize(32, AB::Expr::zero());
-            coeff.push(AB::Expr::one());
-            Polynomial::from_coefficients(&coeff)
-        };
-
-        // Verify first multiplication
-        local.mul1_output.eval(
-            builder,
-            &a_limbs,
-            &b_limbs,
-            // &modulus_2_256,
-            FieldOperation::Mul,
-            local.is_real,
-        );
-
-        // Range check for mul1
-        local.mul1_range_check.eval(
-            builder,
-            &local.mul1_output.result,
-            &limbs_from_polynomial(&modulus_2_256),
-            local.is_real,
-        );
-
-        // 4. Second multiplication (c * d)
-        let c_limbs = limbs_from_access(&local.c_memory);
-        let d_limbs = limbs_from_access(&local.d_memory);
-
-        // Verify second multiplication
-        local.mul2_output.eval(
-            builder,
-            &c_limbs,
-            &d_limbs,
-            // &modulus_2_256,
-            FieldOperation::Mul,
-            local.is_real,
-        );
-
-        // Range check for mul2
-        local.mul2_range_check.eval(
-            builder,
-            &local.mul2_output.result,
-            &limbs_from_polynomial(&modulus_2_256),
-            local.is_real,
-        );
-
-        // Final addition ((a*b) + (c*d))
-        local.final_output.eval(
-            builder,
-            &local.mul1_output.result,
-            &local.mul2_output.result,
-            // &modulus_2_256,
-            FieldOperation::Add,
-            local.is_real,
-        );
-
-        // Range check for final result
-        local.final_range_check.eval(
-            builder,
-            &local.final_output.result,
-            &limbs_from_polynomial(&modulus_2_256),
-            local.is_real,
-        );
-
-        // Syscall verification
-        builder.receive_syscall(
-            local.shard,
-            local.clk,
-            local.nonce,
-            AB::F::from_canonical_u32(SyscallCode::ADD_MUL.syscall_id()),
-            local.a_ptr,  
-            local.b_ptr, 
-            local.is_real,
-            InteractionScope::Local,
-        );
-    }
+    fn eval(&self, builder: &mut AB) {}
 }

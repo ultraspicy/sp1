@@ -17,26 +17,13 @@ pub struct AddMulEvent {
     /// Clock cycle
     pub clk: u32,
 
-    /// a value as list of words
     pub a: u32,
-    /// Memory records for a
-    pub a_memory_records: Vec<MemoryReadRecord>,
-    /// b value as list of words
     pub b: u32,
-    /// Memory records for b
-    pub b_memory_records: Vec<MemoryReadRecord>,
-    /// c value as list of words
     pub c: u32,
-    /// Memory records for c
-    pub c_memory_records: Vec<MemoryReadRecord>,
-    /// d value as list of words
     pub d: u32,
-    /// Memory records for d
-    pub d_memory_records: Vec<MemoryReadRecord>,
 
-    /// Memory records for result (written back to a_ptr)
-    pub result_memory_records: Vec<MemoryWriteRecord>,
+    pub result: u32,
 
-    /// Local memory access events
+    /// The local memory access records.
     pub local_mem_access: Vec<MemoryLocalEvent>,
 }

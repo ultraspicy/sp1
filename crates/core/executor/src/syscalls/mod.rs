@@ -32,6 +32,7 @@ use precompiles::{
         add::WeierstrassAddAssignSyscall, decompress::WeierstrassDecompressSyscall,
         double::WeierstrassDoubleAssignSyscall,
     },
+    addmul::AddMulSyscall,
 };
 
 use sp1_curves::{
@@ -224,6 +225,8 @@ pub fn default_syscall_map() -> HashMap<SyscallCode, Arc<dyn Syscall>> {
         SyscallCode::BLS12381_DECOMPRESS,
         Arc::new(WeierstrassDecompressSyscall::<Bls12381>::new()),
     );
+
+    syscall_map.insert(SyscallCode::ADDMUL, Arc::new(AddMulSyscall));
 
     syscall_map
 }
