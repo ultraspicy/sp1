@@ -19,31 +19,47 @@ impl Syscall for AddMulSyscall {
     ) -> Option<u32> {
         let clk = rt.clk;
 
-        let (_, p) = rt.mr(arg1);
-        let (_, q) = rt.mr(arg2);
-        let (_, r) = rt.mr(X12 as u32);
-        let (_, s) = rt.mr(X13 as u32);
+        //// Get the current value of a word, but doesn't use a memory record.
+        // we will write back this memory with corresponding memory record
+        // which will prove the value in memory before and after the write
+        let p = rt.word_unsafe(arg1);
 
+        let (q_memory_records, q) = rt.mr(arg2);
+        let (r_memory_records, r) = rt.mr(X12 as u32);
+        let (s_memory_records, s) = rt.mr(X13 as u32);
+        println!("============================================");
+        println!("q_memory_records: {:?}", q_memory_records);
         rt.clk += 1;
 
-        // we know it won't overflow
+        // ignore the overflow for now
         let ret = p * q + r * s;
-        let memory_records = rt.mw(arg1, ret);
+        let p_memory_records = rt.mw(arg1, ret);
+        println!("============================================");
+        println!("p_memory_records: {:?}", p_memory_records);
 
         let lookup_id = rt.syscall_lookup_id;
         let shard = rt.current_shard();
         let event = PrecompileEvent::ADDMul(AddMulEvent {
             lookup_id,
             shard,
-            clk,
+            clk,    
             p,
             q,
             r,
             s,
-            local_mem_access: rt.postprocess(),
+            p_ptr: arg1,           
+            q_ptr: arg2,
+            r_ptr: X12 as u32,    
+            s_ptr: X13 as u32,
+            p_memory_records,
+            q_memory_records,
+            r_memory_records,
+            s_memory_records,
+            local_mem_access: rt.postprocess(), // ### captures any local memory accesses that occurred during the syscall execution.
         });
 
-        let sycall_event = rt.rt.syscall_event(clk, syscall_code.syscall_id(), arg1, arg2, lookup_id);
+        let sycall_event =
+            rt.rt.syscall_event(clk, syscall_code.syscall_id(), arg1, arg2, lookup_id);
         rt.add_precompile_event(syscall_code, sycall_event, event);
 
         None

@@ -14,6 +14,7 @@ use crate::syscall::precompiles::keccak256::KeccakPermuteChip;
 use crate::syscall::precompiles::sha256::{ShaCompressChip, ShaExtendChip};
 use crate::syscall::precompiles::u256x2048_mul::U256x2048MulChip;
 use crate::syscall::precompiles::uint256::Uint256MulChip;
+use crate::syscall::precompiles::addmul::AddmulChip;
 use crate::syscall::precompiles::weierstrass::WeierstrassAddAssignChip;
 use crate::syscall::precompiles::weierstrass::WeierstrassDecompressChip;
 use crate::syscall::precompiles::weierstrass::WeierstrassDoubleAssignChip;

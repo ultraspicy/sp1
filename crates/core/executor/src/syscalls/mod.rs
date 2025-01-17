@@ -22,16 +22,10 @@ pub use code::*;
 pub use context::*;
 use hint::{HintLenSyscall, HintReadSyscall};
 use precompiles::{
-    edwards::{add::EdwardsAddAssignSyscall, decompress::EdwardsDecompressSyscall},
-    fptower::{Fp2AddSubSyscall, Fp2MulSyscall, FpOpSyscall},
-    keccak256::permute::Keccak256PermuteSyscall,
-    sha256::{compress::Sha256CompressSyscall, extend::Sha256ExtendSyscall},
-    u256x2048_mul::U256xU2048MulSyscall,
-    uint256::Uint256MulSyscall,
-    weierstrass::{
+    addmul::AddMulSyscall, edwards::{add::EdwardsAddAssignSyscall, decompress::EdwardsDecompressSyscall}, fptower::{Fp2AddSubSyscall, Fp2MulSyscall, FpOpSyscall}, keccak256::permute::Keccak256PermuteSyscall, sha256::{compress::Sha256CompressSyscall, extend::Sha256ExtendSyscall}, u256x2048_mul::U256xU2048MulSyscall, uint256::Uint256MulSyscall, weierstrass::{
         add::WeierstrassAddAssignSyscall, decompress::WeierstrassDecompressSyscall,
         double::WeierstrassDoubleAssignSyscall,
-    },
+    }
 };
 
 use sp1_curves::{
@@ -145,6 +139,8 @@ pub fn default_syscall_map() -> HashMap<SyscallCode, Arc<dyn Syscall>> {
     );
 
     syscall_map.insert(SyscallCode::UINT256_MUL, Arc::new(Uint256MulSyscall));
+
+    syscall_map.insert(SyscallCode::ADD_MUL, Arc::new(AddMulSyscall));
 
     syscall_map.insert(SyscallCode::U256XU2048_MUL, Arc::new(U256xU2048MulSyscall));
 
