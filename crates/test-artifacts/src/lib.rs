@@ -79,3 +79,5 @@ pub const TENDERMINT_BENCHMARK_ELF: &[u8] = include_elf!("tendermint-benchmark-p
 pub const U256XU2048_MUL_ELF: &[u8] = include_elf!("u256x2048-mul");
 
 pub const ADD_MUL_ELF: &[u8] = include_elf!("add-mul-test");
+
+pub const ADD_MUL_NATIVE_ELF: &[u8] = include_elf!("add-mul-native");

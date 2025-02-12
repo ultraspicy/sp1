@@ -21,6 +21,7 @@ mod tests {
         air::MachineAir, baby_bear_poseidon2::BabyBearPoseidon2, CpuProver, StarkGenericConfig,
     };
     use test_artifacts::ADD_MUL_ELF;
+    use test_artifacts::ADD_MUL_NATIVE_ELF;
     use sp1_core_executor::{
         events::{
             LookupId, MemoryReadRecord, MemoryWriteRecord, PrecompileEvent, SyscallEvent

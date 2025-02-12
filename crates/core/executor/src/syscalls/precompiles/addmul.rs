@@ -27,15 +27,12 @@ impl Syscall for AddMulSyscall {
         let (q_memory_records, q) = rt.mr(arg2);
         let (r_memory_records, r) = rt.mr(X12 as u32);
         let (s_memory_records, s) = rt.mr(X13 as u32);
-        println!("============================================");
-        println!("q_memory_records: {:?}", q_memory_records);
+    
         rt.clk += 1;
 
         // ignore the overflow for now
         let ret = p * q + r * s;
         let p_memory_records = rt.mw(arg1, ret);
-        println!("============================================");
-        println!("p_memory_records: {:?}", p_memory_records);
 
         let lookup_id = rt.syscall_lookup_id;
         let shard = rt.current_shard();

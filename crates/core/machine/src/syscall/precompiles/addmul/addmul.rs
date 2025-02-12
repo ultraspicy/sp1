@@ -131,8 +131,6 @@ impl<F: PrimeField32> MachineAir<F> for AddmulChip {
                         cols.r_memory.populate(event.r_memory_records, &mut new_byte_lookup_events);
                         cols.s_memory.populate(event.s_memory_records, &mut new_byte_lookup_events);
 
-                        println!("============================================");
-                        println!("row: {:?}", row);
                         row
                         
                     })
@@ -172,9 +170,6 @@ impl<F: PrimeField32> MachineAir<F> for AddmulChip {
                 trace.values[i * NUM_COLS..(i + 1) * NUM_COLS].borrow_mut();
             cols.nonce = F::from_canonical_usize(i);
         }
-
-        println!("============================================");
-        println!("trace: {:?}", trace);
         trace
     }
 
