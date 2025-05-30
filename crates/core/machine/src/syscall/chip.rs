@@ -18,6 +18,7 @@ use std::{
     borrow::{Borrow, BorrowMut},
     mem::size_of,
 };
+use log::debug;
 /// The number of main trace columns for `SyscallChip`.
 pub const NUM_SYSCALL_COLS: usize = size_of::<SyscallCols<u8>>();
 
@@ -96,6 +97,7 @@ impl<F: PrimeField32> MachineAir<F> for SyscallChip {
                 .collect::<Vec<_>>(),
         };
 
+        debug!("events: {:?}", events);
         let events = events
             .iter()
             .filter(|e| e.syscall_code.should_send() == 1)
@@ -128,6 +130,7 @@ impl<F: PrimeField32> MachineAir<F> for SyscallChip {
         input: &ExecutionRecord,
         _output: &mut ExecutionRecord,
     ) -> RowMajorMatrix<F> {
+        debug!("generate_trace invoked at chips.rs");
         let row_fn = |syscall_event: &SyscallEvent, _: bool| {
             let mut row = [F::zero(); NUM_SYSCALL_COLS];
             let cols: &mut SyscallCols<F> = row.as_mut_slice().borrow_mut();

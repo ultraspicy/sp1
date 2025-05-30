@@ -356,6 +356,15 @@ pub trait ExtensionAirBuilder: BaseAirBuilder {
             self.if_else(condition.clone(), a.0[i].clone(), b.0[i].clone())
         }))
     }
+
+    /// Checks if an extension element is zero.
+    fn is_ext_zero<I: Into<Self::Expr> + Clone>(&mut self, element: BinomialExtension<I>) -> Self::Expr {
+        let mut result = Self::Expr::one();
+        for coeff in element.0 {
+            result = result * coeff.into();
+        }
+        result
+    }
 }
 
 /// A builder that can operation on septic extension elements.
