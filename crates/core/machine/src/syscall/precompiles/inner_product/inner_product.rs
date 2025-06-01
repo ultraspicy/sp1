@@ -23,7 +23,7 @@ use std::{
     mem::size_of,
 };
 
-const MAX_VECTOR_LEN: usize = 32;
+const MAX_VECTOR_LEN: usize = 350;
 const NUM_COLS: usize = size_of::<InnerProductCols<u8>>();
 
 #[derive(Default)]
@@ -105,6 +105,17 @@ impl<F: PrimeField32> MachineAir<F> for InnerProductChip {
                         } else {
                             unreachable!()
                         };
+
+                        println!("=== TRACE GENERATION ===");
+                        println!(
+                            "Event at clk={}, a_ptr={}, b_ptr={}",
+                            event.clk, event.a_ptr, event.b_ptr
+                        );
+                        println!("Vector a has {} elements", event.a.len());
+                        println!("Vector b has {} elements", event.b.len());
+                        println!("a_memory_records has {} records", event.a_memory_records.len());
+                        println!("b_memory_records has {} records", event.b_memory_records.len());
+
                         // init an empty row
                         let mut row: [F; NUM_COLS] = [F::zero(); NUM_COLS];
                         let cols: &mut InnerProductCols<F> = row.as_mut_slice().borrow_mut();
@@ -175,7 +186,8 @@ impl<F: PrimeField32> MachineAir<F> for InnerProductChip {
                 // );
                 row
             },
-            Some(16usize),
+            //input.fixed_log2_rows::<F, _>(self),
+            Some(10),
         );
         debug!("Number of rows after padding: {}", rows.len());
         // debug!("rows.len(): {:?}", rows.len());
@@ -184,9 +196,12 @@ impl<F: PrimeField32> MachineAir<F> for InnerProductChip {
         //     "RowMajorMatrix: {:?}",
         //     RowMajorMatrix::new(rows.clone().into_iter().flatten().collect::<Vec<_>>(), NUM_COLS)
         // );
-        let ret = RowMajorMatrix::new(rows.into_iter().flatten().collect::<Vec<_>>(), NUM_COLS);
-        debug!("ret = {:?}", ret.clone().dimensions());
-        ret
+        let matrix = RowMajorMatrix::new(rows.into_iter().flatten().collect::<Vec<_>>(), NUM_COLS);
+
+        debug!("Generated matrix dimensions: {} rows x {} cols", matrix.height(), matrix.width());
+        debug!("Matrix height is power of 2: {}", matrix.height().is_power_of_two());
+        debug!("Matrix height log2: {}", matrix.height().trailing_zeros());
+        matrix
     }
 
     fn included(&self, shard: &Self::Record) -> bool {
@@ -210,16 +225,25 @@ where
     AB: SP1AirBuilder,
 {
     fn eval(&self, builder: &mut AB) {
-        debug!("invokeing eval");
+        debug!("=== CONSTRAINT MEMORY OPERATIONS ===");
         let main = builder.main();
-        debug!("main = {:?}", main.dimensions());
+        debug!("main dimensions: {:?}", main.dimensions());
+
+        // Check if we have any rows at all
+        if main.height() == 0 {
+            debug!("WARNING: main height is 0!");
+            return;
+        }
+
         let local = main.row_slice(0);
+
+        debug!("Successfully got row slice");
         let local: &InnerProductCols<AB::Var> = (*local).borrow();
 
         // Assert is_real is boolean
         builder.assert_bool(local.is_real);
 
-        // Verify the inner product syscall was properly registered
+        //  Verify the inner product syscall was properly registered
         builder.receive_syscall(
             local.shard,
             local.clk,
@@ -238,6 +262,7 @@ where
             &local.a_len_memory,
             local.is_real,
         );
+
         builder.when(local.is_real).eval_memory_access(
             local.shard,
             local.clk.into(),
@@ -253,10 +278,10 @@ where
         );
 
         // Verify length matches what we recorded in the trace
-        //builder.when(local.is_real).assert_eq(local.a_len_memory.value().reduce::<AB>(), local.len);
+        builder.when(local.is_real).assert_eq(local.a_len_memory.value().reduce::<AB>(), local.len);
 
         // Verify vector reads
-        for i in 0..MAX_VECTOR_LEN {
+        for i in 0..=MAX_VECTOR_LEN {
             // Calculate memory addresses for each element
             let a_addr = local.a_ptr + AB::Expr::from_canonical_u32(4 + i as u32 * 4);
             let b_addr = local.b_ptr + AB::Expr::from_canonical_u32(4 + i as u32 * 4);
@@ -310,5 +335,7 @@ where
             .when(local.is_real)
             .assert_eq(local.result_memory.value().reduce::<AB>(), local.running_sum);
         debug!("verified the memory value written is the computed inner product");
+
+        debug!("Total memory accesses: {}", 2 + 2 * (MAX_VECTOR_LEN + 1) + 1);
     }
 }

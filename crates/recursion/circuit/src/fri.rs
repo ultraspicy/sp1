@@ -22,6 +22,8 @@ use crate::{
     FriProofVariable, FriQueryProofVariable, TwoAdicPcsProofVariable, TwoAdicPcsRoundVariable,
 };
 
+use tracing::debug;
+
 #[derive(Debug, Clone, Copy)]
 pub struct PolynomialShape {
     pub width: usize,
@@ -149,6 +151,8 @@ pub fn verify_two_adic_pcs<C: CircuitConfig<F = SC::Val>, SC: BabyBearFriConfigV
                     let mat_domain = mat.domain;
                     let mat_points = mat.points;
                     let mat_values = mat.values;
+                    debug!("mat_domain: {:?}", mat_domain);
+                    debug!("config.log_blowup: {:?}", config.log_blowup);
                     let log_height = log2_strict_usize(mat_domain.size()) + config.log_blowup;
 
                     let bits_reduced = log_global_max_height - log_height;

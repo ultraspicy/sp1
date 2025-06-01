@@ -217,7 +217,7 @@ pub mod baby_bear_poseidon2 {
             Ok(value) => value.parse().unwrap(),
             Err(_) => 100,
         };
-        FriConfig { log_blowup: 1, num_queries, proof_of_work_bits: 16, mmcs: challenge_mmcs }
+        FriConfig { log_blowup: 2, num_queries, proof_of_work_bits: 16, mmcs: challenge_mmcs }
     }
 
     #[must_use]

@@ -14,10 +14,14 @@ impl Syscall for InnerProductSyscall {
         arg1: u32,
         arg2: u32,
     ) -> Option<u32> {
+        debug!("=== SYSCALL MEMORY OPERATIONS ===");
         let clk = rt.clk;
+        debug!("Syscall at clk={}", clk);
 
         let a_ptr = arg1;
+        debug!("Read a_len from addr {} at clk {}", a_ptr, clk);
         let b_ptr = arg2;
+        debug!("Read b_len from addr {} at clk {}", b_ptr, clk);
 
         // get the length of two vector
         let (a_len_memory, a_len) = rt.mr(a_ptr);
@@ -28,7 +32,9 @@ impl Syscall for InnerProductSyscall {
         // Read the actual vectors. u32 will be 4 bytes
         // Skip the length field (first 4 bytes) and read the vector elements
         let (a_memory_records, a) = rt.mr_slice(a_ptr + 4, a_len as usize);
+        debug!("Read {} elements from a_ptr={} at clk {}", a.len(), a_ptr + 4, clk);
         let (b_memory_records, b) = rt.mr_slice(b_ptr + 4, b_len as usize);
+        debug!("Read {} elements from b_ptr={} at clk {}", b.len(), b_ptr + 4, clk);
 
         // Compute inner product
         let mut result = 0u32;
@@ -41,6 +47,9 @@ impl Syscall for InnerProductSyscall {
         rt.clk += 1;
         // write result as u32 into a_ptr
         let result_memory_records = rt.mw(a_ptr, result);
+        debug!("Write result to addr {} at clk {}", a_ptr, rt.clk);
+        debug!("Total syscall memory ops: {} reads + 1 write", 
+               2 + a.len() + b.len());
         // println!("clk: {:?}", clk);
         // println!("rt.clk: {:?}", rt.clk);
         // println!("a: {:?}", a);
@@ -54,7 +63,7 @@ impl Syscall for InnerProductSyscall {
             shard,
             clk,
             a_ptr,                              // Input pointer for first vector
-            a,                                  // Actual input data for first vector [32, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]    
+            a,                                  // Actual input data for first vector 
             b_ptr,                              // Input pointer for second vector
             b,                                  // Actual input data for second vector                  
             a_len_memory,                       // Memory record for reading length of first vector { value: 33, shard: 1, timestamp: 12448, prev_shard: 1, prev_timestamp: 8232 } 
